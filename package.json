@@ -1,0 +1,18 @@
+{
+  "name": "node-fsd-parser",
+  "version": "0.1.0",
+  "description": "A nodejs based parser for Facility Service Definition (FSD) api files https://facilityapi.github.io/",
+  "main": "index.js",
+  "author": "KorbinAncell",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "json-beautify": "^1.1.1",
+    "moo": "^0.5.1",
+    "nearley": "^2.20.1"
+  },
+  "scripts": {
+    "compile": "nearleyc grammar.ne -o fsd-parser.js",
+    "test": "node test.js"
+  }
+}

@@ -1,0 +1,6 @@
+{
+	[obsolete] // no parameters
+	[csharp(name: query)] // one parameter
+	[http(path: "/search", code: 202)] // two parameters
+	[obsolete, obsolete, obsolete] // two attrs
+}
