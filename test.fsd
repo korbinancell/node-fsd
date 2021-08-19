@@ -1,6 +1,15 @@
 {
-	[obsolete] // no parameters
-	[csharp(name: query)] // one parameter
-	[http(path: "/search", code: 202)] // two parameters
-	[obsolete, obsolete, obsolete] // two attrs
+	[http(method: GET, path: "/help")]
+	method test {
+		[http(name: "q")] query: string;
+		/// Help
+		[obsolete, http(from: path)] // Does this work?
+		groupId: string;
+		[validate(count: 1..)]
+		wat: int32!;
+	} : {
+		/// No use
+		[obsolete]
+		result: Gift;
+	}
 }

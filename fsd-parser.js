@@ -11,18 +11,44 @@ const lexer = moo.compile({
 	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	value: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"|(?:[0-9a-zA-Z.+_-]+)/,
+	keyword: ['method'],
 	'[': '[',
 	']': ']',
 	'(': '(',
 	')': ')',
 	'{': '{',
 	'}': '}',
+	'<': '<',
+	'>': '>',
 	',': ',',
 	'"': '"',
-	':': ':'
+	':': ':',
+	';': ';',
+	'!': '!'
 });
 
 
+
+function extractDescriptors(d) {
+	const clean = d.flat().filter(Boolean).flat();
+	const attributes = clean.map(x => x.attributes).filter(Boolean).flat();
+	const summaryLines = clean.map(x => x.summary).filter(Boolean).flat();
+	return { summaryLines, attributes };
+}
+
+function extractMethod(d) {
+	return {
+		...extractDescriptors(d[0]),
+		type: 'method',
+		name: d[3].value,
+		requestAttrs: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
+		responseAttrs: d[13].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
+	}
+}
+
+function gatherAttributes(d) {
+	return d[2][0] ? { attributes: d[2].flat().filter(Boolean).flat() } : null
+}
 
 function extractPair([key, value], output) {
 	if (key) {
@@ -53,7 +79,7 @@ function extractAttributes(d) {
 		output.push(d[3][i][3]);
 	}
 
-	return output;
+	return { attributes: output };
 }
 
 var grammar = {
@@ -178,9 +204,34 @@ var grammar = {
         }
         },
     {"name": "main$ebnf$1", "symbols": []},
-    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "attributes"]},
+    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "method"]},
     {"name": "main$ebnf$1", "symbols": ["main$ebnf$1", "main$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
-    {"name": "main", "symbols": ["nl", {"literal":"{"}, "main$ebnf$1", "nl", {"literal":"}"}, "nl"], "postprocess": function(d) { return d[2][0] ? { attributes: d[2].flat().filter(Boolean).flat() } : null }},
+    {"name": "main", "symbols": ["nl", {"literal":"{"}, "main$ebnf$1", "nl", {"literal":"}"}]},
+    {"name": "method$ebnf$1", "symbols": []},
+    {"name": "method$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
+    {"name": "method$ebnf$1", "symbols": ["method$ebnf$1", "method$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "method$ebnf$2", "symbols": []},
+    {"name": "method$ebnf$2$subexpression$1$ebnf$1", "symbols": []},
+    {"name": "method$ebnf$2$subexpression$1$ebnf$1$subexpression$1", "symbols": ["nl", "descriptors"]},
+    {"name": "method$ebnf$2$subexpression$1$ebnf$1", "symbols": ["method$ebnf$2$subexpression$1$ebnf$1", "method$ebnf$2$subexpression$1$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "method$ebnf$2$subexpression$1", "symbols": ["method$ebnf$2$subexpression$1$ebnf$1", "nl", "methodAttr"]},
+    {"name": "method$ebnf$2", "symbols": ["method$ebnf$2", "method$ebnf$2$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "method$ebnf$3", "symbols": []},
+    {"name": "method$ebnf$3$subexpression$1$ebnf$1", "symbols": []},
+    {"name": "method$ebnf$3$subexpression$1$ebnf$1$subexpression$1", "symbols": ["nl", "descriptors"]},
+    {"name": "method$ebnf$3$subexpression$1$ebnf$1", "symbols": ["method$ebnf$3$subexpression$1$ebnf$1", "method$ebnf$3$subexpression$1$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "method$ebnf$3$subexpression$1", "symbols": ["method$ebnf$3$subexpression$1$ebnf$1", "nl", "methodAttr"]},
+    {"name": "method$ebnf$3", "symbols": ["method$ebnf$3", "method$ebnf$3$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "method", "symbols": ["method$ebnf$1", {"literal":"method"}, "_", (lexer.has("name") ? {type: "name"} : name), "nl", {"literal":"{"}, "method$ebnf$2", "nl", {"literal":"}"}, "nl", {"literal":":"}, "nl", {"literal":"{"}, "method$ebnf$3", "nl", {"literal":"}"}], "postprocess": extractMethod},
+    {"name": "methodAttr$ebnf$1", "symbols": [{"literal":"!"}], "postprocess": id},
+    {"name": "methodAttr$ebnf$1", "symbols": [], "postprocess": function(d) {return null;}},
+    {"name": "methodAttr", "symbols": [(lexer.has("name") ? {type: "name"} : name), "_", {"literal":":"}, "_", "attrValue", "_", "methodAttr$ebnf$1", "_", {"literal":";"}], "postprocess": d => ({ name: d[0].value, value: d[4], isRequired: !!d[6] })},
+    {"name": "attrValue", "symbols": [(lexer.has("name") ? {type: "name"} : name)], "postprocess": d => ({ type: d[0].value })},
+    {"name": "attrValue", "symbols": [(lexer.has("name") ? {type: "name"} : name), "_", {"literal":"<"}, "_", "attrValue", "_", {"literal":">"}], "postprocess": d => ({ type: d[0].value, value: d[4] })},
+    {"name": "attrValue", "symbols": ["attrValue", "_", {"literal":"["}, {"literal":"]"}], "postprocess": d => ({ type: d[0], isArray: true })},
+    {"name": "descriptors", "symbols": ["summary"], "postprocess": d => d},
+    {"name": "descriptors", "symbols": ["attributes"], "postprocess": d => d},
+    {"name": "summary", "symbols": [(lexer.has("summary") ? {type: "summary"} : summary)], "postprocess": d => ({ summary: [d[0].value.substring(3).trim()] })},
     {"name": "attributes$ebnf$1", "symbols": []},
     {"name": "attributes$ebnf$1$subexpression$1", "symbols": ["_", {"literal":","}, "_", "attribute"]},
     {"name": "attributes$ebnf$1", "symbols": ["attributes$ebnf$1", "attributes$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
@@ -188,12 +239,12 @@ var grammar = {
     {"name": "attribute$ebnf$1$subexpression$1", "symbols": ["_", "params"]},
     {"name": "attribute$ebnf$1", "symbols": ["attribute$ebnf$1$subexpression$1"], "postprocess": id},
     {"name": "attribute$ebnf$1", "symbols": [], "postprocess": function(d) {return null;}},
-    {"name": "attribute", "symbols": [(lexer.has("name") ? {type: "name"} : name), "attribute$ebnf$1"], "postprocess": function(d) { return { name: d[0].value, params: d[1] ? d[1][1] : null } }},
+    {"name": "attribute", "symbols": [(lexer.has("name") ? {type: "name"} : name), "attribute$ebnf$1"], "postprocess": d => ({ name: d[0].value, params: d[1] ? d[1][1] : null })},
     {"name": "params$ebnf$1", "symbols": []},
     {"name": "params$ebnf$1$subexpression$1", "symbols": ["_", {"literal":","}, "_", "pair"]},
     {"name": "params$ebnf$1", "symbols": ["params$ebnf$1", "params$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "params", "symbols": [{"literal":"("}, "_", "pair", "params$ebnf$1", "_", {"literal":")"}], "postprocess": extractParams},
-    {"name": "pair", "symbols": [(lexer.has("name") ? {type: "name"} : name), "_", {"literal":":"}, "_", "value"], "postprocess": function(d) { return [d[0], d[4]]; }},
+    {"name": "pair", "symbols": [(lexer.has("name") ? {type: "name"} : name), "_", {"literal":":"}, "_", "value"], "postprocess": d => [d[0], d[4]]},
     {"name": "value", "symbols": [(lexer.has("name") ? {type: "name"} : name)], "postprocess": id},
     {"name": "value", "symbols": [(lexer.has("value") ? {type: "value"} : value)], "postprocess": id},
     {"name": "nl", "symbols": []},
@@ -203,9 +254,8 @@ var grammar = {
     {"name": "nl$ebnf$2", "symbols": [], "postprocess": function(d) {return null;}},
     {"name": "nl$ebnf$3", "symbols": [(lexer.has("space") ? {type: "space"} : space)], "postprocess": id},
     {"name": "nl$ebnf$3", "symbols": [], "postprocess": function(d) {return null;}},
-    {"name": "nl", "symbols": ["nl$ebnf$1", "nl$ebnf$2", "nl$ebnf$3"], "postprocess": function(d) { return null; }},
-    {"name": "summary", "symbols": ["_", (lexer.has("summary") ? {type: "summary"} : summary), "_"]},
-    {"name": "comment", "symbols": ["_", (lexer.has("comment") ? {type: "comment"} : comment), "_"], "postprocess": function(d) { return null; }}
+    {"name": "nl", "symbols": ["nl$ebnf$1", "nl$ebnf$2", "nl$ebnf$3"], "postprocess": d => null},
+    {"name": "comment", "symbols": ["_", (lexer.has("comment") ? {type: "comment"} : comment), "_"], "postprocess": d => null}
 ]
   , ParserStart: "main"
 }
