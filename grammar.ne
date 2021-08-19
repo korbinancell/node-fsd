@@ -7,7 +7,7 @@ const lexer = moo.compile({
 	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	value: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"|(?:[0-9a-zA-Z.+_-]+)/,
-	keyword: ['method'],
+	keyword: ['method', 'data'],
 	'[': '[',
 	']': ']',
 	'(': '(',
@@ -31,12 +31,17 @@ const lexer = moo.compile({
 @builtin "whitespace.ne"
 @builtin "string.ne"
 
-main -> nl "{" (nl method):* nl "}"
+main -> nl "{" (nl dto):* nl "}"
+
+# DTO
+dto -> (descriptors nl):* "data" _ %name nl "{" ((nl descriptors):* nl attrPair):* nl "}"															{% extractDto %}
 
 # Method
 method ->
-	(descriptors nl):* "method" _ %name nl "{" ((nl descriptors):* nl methodAttr):* nl "}" nl ":" nl "{" ((nl descriptors):* nl methodAttr):* nl "}" {% extractMethod %}
-methodAttr -> %name _ ":" _ attrValue _ "!":? _ ";"							{% d => ({ name: d[0].value, value: d[4], isRequired: !!d[6] }) %}
+	(descriptors nl):* "method" _ %name nl "{" ((nl descriptors):* nl attrPair):* nl "}" nl ":" nl "{" ((nl descriptors):* nl attrPair):* nl "}"	{% extractMethod %}
+
+# DTO & Method pair
+attrPair -> %name _ ":" _ attrValue _ "!":? _ ";"							{% d => ({ name: d[0].value, value: d[4], isRequired: !!d[6] }) %}
 attrValue ->
 	  %name																	{% d => ({ type: d[0].value }) %}
 	| %name _ "<" _ attrValue _ ">"											{% d => ({ type: d[0].value, value: d[4] }) %}
@@ -73,6 +78,15 @@ function extractDescriptors(d) {
 	const attributes = clean.map(x => x.attributes).filter(Boolean).flat();
 	const summaryLines = clean.map(x => x.summary).filter(Boolean).flat();
 	return { summaryLines, attributes };
+}
+
+function extractDto(d) {
+	return {
+		...extractDescriptors(d[0]),
+		type: 'dto',
+		name: d[3].value,
+		members: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
+	}
 }
 
 function extractMethod(d) {

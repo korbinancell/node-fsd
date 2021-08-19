@@ -1,15 +1,5 @@
 {
-	[http(method: GET, path: "/help")]
-	method test {
-		[http(name: "q")] query: string;
-		/// Help
-		[obsolete, http(from: path)] // Does this work?
-		groupId: string;
-		[validate(count: 1..)]
-		wat: int32!;
-	} : {
-		/// No use
-		[obsolete]
-		result: Gift;
+	data gift {
+		results: string[];
 	}
 }

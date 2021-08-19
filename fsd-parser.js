@@ -11,7 +11,7 @@ const lexer = moo.compile({
 	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	value: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"|(?:[0-9a-zA-Z.+_-]+)/,
-	keyword: ['method'],
+	keyword: ['method', 'data'],
 	'[': '[',
 	']': ']',
 	'(': '(',
@@ -34,6 +34,15 @@ function extractDescriptors(d) {
 	const attributes = clean.map(x => x.attributes).filter(Boolean).flat();
 	const summaryLines = clean.map(x => x.summary).filter(Boolean).flat();
 	return { summaryLines, attributes };
+}
+
+function extractDto(d) {
+	return {
+		...extractDescriptors(d[0]),
+		type: 'dto',
+		name: d[3].value,
+		members: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
+	}
 }
 
 function extractMethod(d) {
@@ -204,9 +213,19 @@ var grammar = {
         }
         },
     {"name": "main$ebnf$1", "symbols": []},
-    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "method"]},
+    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "dto"]},
     {"name": "main$ebnf$1", "symbols": ["main$ebnf$1", "main$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "main", "symbols": ["nl", {"literal":"{"}, "main$ebnf$1", "nl", {"literal":"}"}]},
+    {"name": "dto$ebnf$1", "symbols": []},
+    {"name": "dto$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
+    {"name": "dto$ebnf$1", "symbols": ["dto$ebnf$1", "dto$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "dto$ebnf$2", "symbols": []},
+    {"name": "dto$ebnf$2$subexpression$1$ebnf$1", "symbols": []},
+    {"name": "dto$ebnf$2$subexpression$1$ebnf$1$subexpression$1", "symbols": ["nl", "descriptors"]},
+    {"name": "dto$ebnf$2$subexpression$1$ebnf$1", "symbols": ["dto$ebnf$2$subexpression$1$ebnf$1", "dto$ebnf$2$subexpression$1$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "dto$ebnf$2$subexpression$1", "symbols": ["dto$ebnf$2$subexpression$1$ebnf$1", "nl", "attrPair"]},
+    {"name": "dto$ebnf$2", "symbols": ["dto$ebnf$2", "dto$ebnf$2$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "dto", "symbols": ["dto$ebnf$1", {"literal":"data"}, "_", (lexer.has("name") ? {type: "name"} : name), "nl", {"literal":"{"}, "dto$ebnf$2", "nl", {"literal":"}"}], "postprocess": extractDto},
     {"name": "method$ebnf$1", "symbols": []},
     {"name": "method$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
     {"name": "method$ebnf$1", "symbols": ["method$ebnf$1", "method$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
@@ -214,18 +233,18 @@ var grammar = {
     {"name": "method$ebnf$2$subexpression$1$ebnf$1", "symbols": []},
     {"name": "method$ebnf$2$subexpression$1$ebnf$1$subexpression$1", "symbols": ["nl", "descriptors"]},
     {"name": "method$ebnf$2$subexpression$1$ebnf$1", "symbols": ["method$ebnf$2$subexpression$1$ebnf$1", "method$ebnf$2$subexpression$1$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
-    {"name": "method$ebnf$2$subexpression$1", "symbols": ["method$ebnf$2$subexpression$1$ebnf$1", "nl", "methodAttr"]},
+    {"name": "method$ebnf$2$subexpression$1", "symbols": ["method$ebnf$2$subexpression$1$ebnf$1", "nl", "attrPair"]},
     {"name": "method$ebnf$2", "symbols": ["method$ebnf$2", "method$ebnf$2$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "method$ebnf$3", "symbols": []},
     {"name": "method$ebnf$3$subexpression$1$ebnf$1", "symbols": []},
     {"name": "method$ebnf$3$subexpression$1$ebnf$1$subexpression$1", "symbols": ["nl", "descriptors"]},
     {"name": "method$ebnf$3$subexpression$1$ebnf$1", "symbols": ["method$ebnf$3$subexpression$1$ebnf$1", "method$ebnf$3$subexpression$1$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
-    {"name": "method$ebnf$3$subexpression$1", "symbols": ["method$ebnf$3$subexpression$1$ebnf$1", "nl", "methodAttr"]},
+    {"name": "method$ebnf$3$subexpression$1", "symbols": ["method$ebnf$3$subexpression$1$ebnf$1", "nl", "attrPair"]},
     {"name": "method$ebnf$3", "symbols": ["method$ebnf$3", "method$ebnf$3$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "method", "symbols": ["method$ebnf$1", {"literal":"method"}, "_", (lexer.has("name") ? {type: "name"} : name), "nl", {"literal":"{"}, "method$ebnf$2", "nl", {"literal":"}"}, "nl", {"literal":":"}, "nl", {"literal":"{"}, "method$ebnf$3", "nl", {"literal":"}"}], "postprocess": extractMethod},
-    {"name": "methodAttr$ebnf$1", "symbols": [{"literal":"!"}], "postprocess": id},
-    {"name": "methodAttr$ebnf$1", "symbols": [], "postprocess": function(d) {return null;}},
-    {"name": "methodAttr", "symbols": [(lexer.has("name") ? {type: "name"} : name), "_", {"literal":":"}, "_", "attrValue", "_", "methodAttr$ebnf$1", "_", {"literal":";"}], "postprocess": d => ({ name: d[0].value, value: d[4], isRequired: !!d[6] })},
+    {"name": "attrPair$ebnf$1", "symbols": [{"literal":"!"}], "postprocess": id},
+    {"name": "attrPair$ebnf$1", "symbols": [], "postprocess": function(d) {return null;}},
+    {"name": "attrPair", "symbols": [(lexer.has("name") ? {type: "name"} : name), "_", {"literal":":"}, "_", "attrValue", "_", "attrPair$ebnf$1", "_", {"literal":";"}], "postprocess": d => ({ name: d[0].value, value: d[4], isRequired: !!d[6] })},
     {"name": "attrValue", "symbols": [(lexer.has("name") ? {type: "name"} : name)], "postprocess": d => ({ type: d[0].value })},
     {"name": "attrValue", "symbols": [(lexer.has("name") ? {type: "name"} : name), "_", {"literal":"<"}, "_", "attrValue", "_", {"literal":">"}], "postprocess": d => ({ type: d[0].value, value: d[4] })},
     {"name": "attrValue", "symbols": ["attrValue", "_", {"literal":"["}, {"literal":"]"}], "postprocess": d => ({ type: d[0], isArray: true })},
