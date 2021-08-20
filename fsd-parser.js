@@ -11,7 +11,7 @@ const lexer = moo.compile({
 	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	value: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"|(?:[0-9a-zA-Z.+_-]+)/,
-	keyword: ['method', 'data'],
+	keyword: ['method', 'data', 'errors'],
 	'[': '[',
 	']': ']',
 	'(': '(',
@@ -30,7 +30,6 @@ const lexer = moo.compile({
 
 
 function extractEnumType(d) {
-	console.log(d);
 	return {
 		...extractDescriptors(d[0]),
 		name: d[2].value
@@ -38,7 +37,6 @@ function extractEnumType(d) {
 }
 
 function extractEnum(d) {
-	console.log(d[6])
 	const types = d[6].map(x => x[0])
 	if (d[7] && d[7].length) {
 		types.push(d[7][0]);
@@ -50,6 +48,10 @@ function extractEnum(d) {
 		name: d[3].value,
 		types,
 	}
+}
+
+function extractErrors(d) {
+	return { ...extractEnum(d), type: 'errors' };
 }
 
 function extractDescriptors(d) {
@@ -236,9 +238,19 @@ var grammar = {
         }
         },
     {"name": "main$ebnf$1", "symbols": []},
-    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "enum"]},
+    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "errors"]},
     {"name": "main$ebnf$1", "symbols": ["main$ebnf$1", "main$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "main", "symbols": ["nl", {"literal":"{"}, "main$ebnf$1", "nl", {"literal":"}"}]},
+    {"name": "errors$ebnf$1", "symbols": []},
+    {"name": "errors$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
+    {"name": "errors$ebnf$1", "symbols": ["errors$ebnf$1", "errors$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "errors$ebnf$2", "symbols": []},
+    {"name": "errors$ebnf$2$subexpression$1", "symbols": ["enumMember", "_", {"literal":","}]},
+    {"name": "errors$ebnf$2", "symbols": ["errors$ebnf$2", "errors$ebnf$2$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "errors$ebnf$3$subexpression$1", "symbols": ["enumMember"]},
+    {"name": "errors$ebnf$3", "symbols": ["errors$ebnf$3$subexpression$1"], "postprocess": id},
+    {"name": "errors$ebnf$3", "symbols": [], "postprocess": function(d) {return null;}},
+    {"name": "errors", "symbols": ["errors$ebnf$1", {"literal":"errors"}, "_", (lexer.has("name") ? {type: "name"} : name), "nl", {"literal":"{"}, "errors$ebnf$2", "errors$ebnf$3", "nl", {"literal":"}"}], "postprocess": extractErrors},
     {"name": "enum$ebnf$1", "symbols": []},
     {"name": "enum$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
     {"name": "enum$ebnf$1", "symbols": ["enum$ebnf$1", "enum$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},

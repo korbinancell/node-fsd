@@ -1,7 +1,7 @@
 {
-	enum giftKinds {
-		form,
-		sms,
-		giftSchedule
+	errors MyErrors
+	{
+		[http(code: 503)]
+		OutToLunch
 	}
 }

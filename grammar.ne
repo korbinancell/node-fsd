@@ -7,7 +7,7 @@ const lexer = moo.compile({
 	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	value: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"|(?:[0-9a-zA-Z.+_-]+)/,
-	keyword: ['method', 'data'],
+	keyword: ['method', 'data', 'errors'],
 	'[': '[',
 	']': ']',
 	'(': '(',
@@ -31,7 +31,10 @@ const lexer = moo.compile({
 @builtin "whitespace.ne"
 @builtin "string.ne"
 
-main -> nl "{" (nl enum):* nl "}"
+main -> nl "{" (nl errors):* nl "}"
+
+# Errors
+errors -> (descriptors nl):* "errors" _ %name nl "{" (enumMember _ ","):* (enumMember):? nl "}"														{% extractErrors %}
 
 # Enum
 enum -> (descriptors nl):* "enum" _ %name nl "{" (enumMember _ ","):* (enumMember):? nl "}"															{% extractEnum %}
@@ -96,6 +99,10 @@ function extractEnum(d) {
 		name: d[3].value,
 		types,
 	}
+}
+
+function extractErrors(d) {
+	return { ...extractEnum(d), type: 'errors' };
 }
 
 function extractDescriptors(d) {
