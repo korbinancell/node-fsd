@@ -8,7 +8,7 @@ const lexer = moo.compile({
 	memberRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
 	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
 	valueParams: /(?<=:\s)"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"/,
-	value: /(?<=:\s).[^,)\s;]+/,
+	value: /(?<=:\s).[^,)\s;{}!]+/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	keyword: ['method', 'data', 'errors', 'service', "{}"],
 	'[': '[',
@@ -34,13 +34,16 @@ const lexer = moo.compile({
 @builtin "whitespace.ne"
 @builtin "string.ne"
 
-main -> nl service nl remarks nl																													{% finalCleanup %}
+main -> nl service
 
 # Remark
-remarks -> (nl %memberRemark):* (nl %lastRemark):?																									{% extractRemarks %} 
+remarks -> (nl %memberRemark):* (nl %lastRemark):?							{% extractRemarks %}
 
 # Service
-service -> (descriptors nl):* "service" _ %name nl "{" (nl serviceMembers):* nl "}"																	{% extractService %}
+service -> descriptors "service" _ %name nl serviceBody						{% extractService %}
+serviceBody -> 
+	  "{}"																	{% extractServiceBody %}
+	| "{" (nl serviceMembers):* nl "}"										{% extractServiceBody %}
 serviceMembers ->
 	  method
 	| dto
@@ -48,42 +51,43 @@ serviceMembers ->
 	| errors
 
 # Errors
-errors -> (descriptors nl):* "errors" _ %name nl "{" (enumMember _ ","):* (enumMember):? nl "}"														{% extractErrors %}
+errors -> descriptors "errors" _ %name nl enumBody							{% extractErrors %}
 
 # Enum
-enum -> (descriptors nl):* "enum" _ %name nl "{" (enumMember _ ","):* (enumMember):? nl "}"															{% extractEnum %}
-enumMember -> (nl descriptors):* nl %name																											{% extractEnumType %}
+enum -> descriptors "enum" _ %name nl enumBody								{% extractEnum %}
+enumBody ->
+	  "{}"																	{% extractEnumBody %}
+	| "{" (nl descriptors %name _ ","):* (nl descriptors %name):? nl "}"	{% extractEnumBody %}
 
 # DTO
-dto -> (descriptors nl):* "data" _ %name nl "{" ((nl descriptors):* nl attrPair):* nl "}"															{% extractDto %}
+dto -> descriptors "data" _ %name nl methodBody								{% extractDto %}
 
 # Method
-method -> (descriptors nl):* "method" _ %name nl methodBody nl ":" nl methodBody																	{% extractMethod %}
+method -> descriptors "method" _ %name nl methodBody nl ":" nl methodBody	{% extractMethod %}
 methodBody ->
-	  "{}"																																			{% extractMethodBody %}
-	| "{" ((nl descriptors):* nl attrPair):* nl "}"																									{% extractMethodBody %}
+	  "{}"																	{% extractMethodBody %}
+	| "{" (nl descriptors attrPair):* nl "}"								{% extractMethodBody %}
 
 # DTO & Method pair
-attrPair -> %name _ ":" _ attrValue _ "!":? _ ";"							{% d => ({ name: d[0].value, value: d[4], isRequired: !!d[6] }) %}
+attrPair -> %name _ ":" _ attrValue _ "!":? _ ";"							{% d => ({ attribute: { name: d[0].value, value: d[4], isRequired: !!d[6] }}) %}
 attrValue ->
 	  %value																{% d => ({ type: d[0].value }) %}
 	| %value _ "<" _ attrValue _ ">"										{% d => ({ type: d[0].value, value: d[4] }) %}
 	| attrValue _ "[" "]"													{% d => ({ type: d[0], isArray: true }) %}
 
 # FSD Desc
-descriptors ->
-	  summary																{% d => d %}
-	| attributes															{% d => d %}
+descriptors -> (descriptor nl):*											{% extractDescriptors %}
+descriptor -> summary | attributes
 
 # Summary
-summary -> %summary															{% d => ({ summary: [d[0].value.substring(3).trim()] }) %}
+summary -> %summary															{% extractSummary %}
 
 # Attributes
 attributes -> "[" _ attribute (_ "," _ attribute):* _ "]"					{% extractAttributes %}
-attribute -> %name (_ params):?												{% d => ({ name: d[0].value, params: d[1] ? d[1][1] : null }) %}
+attribute -> %name (_ params):?												{% extractAttribute %}
 
 params -> "(" _ pair (_ "," _ pair):* _ ")"									{% extractParams %}
-pair -> %name _ ":" _ value													{% d => [d[0], d[4]] %}
+pair -> %name _ ":" _ value													{% extractPair %}
 value -> %valueParams | %value
 
 # Shared
@@ -110,34 +114,56 @@ function extractRemarks(d) {
 	return remarks.map(x => getRemarkTarget(x.text));
 }
 
+function extractServiceBody(d) {
+	const members = d.flat(10).filter(x => !!x && x.type !== '{' && x.type !== '}' && x.text !== '{}');
+
+	return { members }
+}
+
 function extractService(d) {
+	const flatInput = d.flat(10).filter(Boolean);
+	const descriptors = flatInput[0]?.descriptors;
+
 	return {
-		...extractDescriptors(d[0]),
+		...descriptors,
 		remarks: '',
-		name: d[3].value,
-		members: d[6].flat().filter(Boolean).flat(),
+		name: flatInput[2].value,
+		members: flatInput[3].members,
 	};
 }
 
-function extractEnumType(d) {
-	return {
-		...extractDescriptors(d[0]),
-		name: d[2].value
+function extractEnumBody(d) {
+	const filteredInput = d.filter(x => !!x && x.type !== '{' && x.type !== '}' && x.text !== '{}');
+	let flatInput;
+	if (filteredInput.length === 2) {
+		flatInput = filteredInput[0];
+		flatInput.push(filteredInput[1]);
+	} else {
+		flatInput = filteredInput.flat();
 	}
+
+	if (!flatInput.length) {
+		return { types: []};
+	}
+
+	return { types: flatInput.map(x => x.filter(Boolean)).reduce((acc, attr) => {
+		const descriptors = attr[0].descriptors;
+		const name = attr[1].value;
+		acc.push({ ...descriptors, name });
+		return acc;
+	}, []) }
 }
 
 function extractEnum(d) {
-	const types = d[6].map(x => x[0])
-	if (d[7] && d[7].length) {
-		types.push(d[7][0]);
-	}
+	const flatInput = d.flat(10).filter(Boolean);
+	const descriptors = flatInput[0]?.descriptors;
 
 	return {
-		...extractDescriptors(d[0]),
+		...descriptors,
 		remarks: '',
 		type: 'enum',
-		name: d[3].value,
-		types,
+		name: flatInput[2].value,
+		types: flatInput[3].types,
 	}
 }
 
@@ -146,77 +172,86 @@ function extractErrors(d) {
 }
 
 function extractDescriptors(d) {
-	const clean = d.flat().filter(Boolean).flat();
-	const attributes = clean.map(x => x.attributes).filter(Boolean).flat();
-	const summaryLines = clean.map(x => x.summary).filter(Boolean).flat();
-	return { summaryLines, attributes };
+	const flatInput = d.flat(10).filter(Boolean);
+	const attributes = flatInput.map(x => x.attributes).filter(Boolean).flat();
+	const summaryLines = flatInput.map(x => x.summary).filter(Boolean).flat();
+
+	return { descriptors: { summaryLines, attributes } };
 }
 
 function extractDto(d) {
+	const flatInput = d.flat(10).filter(Boolean);
+	const descriptors = flatInput[0]?.descriptors;
+
 	return {
-		...extractDescriptors(d[0]),
+		...descriptors,
 		remarks: '',
 		type: 'dto',
-		name: d[3].value,
-		members: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
+		name: flatInput[2].value,
+		members: flatInput[3].attributes,
 	}
 }
 
 function extractMethodBody(d) {
-	// console.log(d);
-	if (d[0].type === 'keyword' && d[0].value === '{}') {
+	const flatInput = d.flat().filter(x => !!x && x.type !== '{' && x.type !== '}' && x.text !== '{}');
+	if (!flatInput.length) {
 		return { attributes: []};
 	}
-	return {attributes: d[1]};
+
+	return { attributes: flatInput.map(x => x.filter(Boolean)).reduce((acc, attr) => {
+		const descriptors = attr[0].descriptors;
+		const attribute = attr[1].attribute;
+		acc.push({...descriptors, ...attribute});
+		return acc;
+	}, []) }
 }
 
 function extractMethod(d) {
-	console.log(d.flat(6).filter(Boolean));
+	const flatInput = d.flat(10).filter(Boolean);
+	const descriptors = flatInput[0]?.descriptors;
+
 	return {
-		...extractDescriptors(d[0]),
+		...descriptors,
 		remarks: '',
 		type: 'method',
-		name: d[3].value,
-		// requestAttrs: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
-		// responseAttrs: d[13].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
+		name: flatInput[2].value,
+		requestAttrs: flatInput[3]?.attributes || [],
+		responseAttrs: flatInput[5]?.attributes || []
 	}
 }
 
-function gatherAttributes(d) {
-	return d[2][0] ? { attributes: d[2].flat().filter(Boolean).flat() } : null
+function extractSummary(d) {
+	return { summary: d.flat(10).filter(Boolean)[0].value.trim().substring(3).trim() };
 }
 
-function extractPair(kv, output) {
-	const [key, value] = kv.flat();
-	if (key) {
-		let cleanValue = value.value.replace(/['"]+/g, '');
-		if (cleanValue && !isNaN(cleanValue)) {
-			cleanValue = Number.parseInt(cleanValue);
-		}
-		output[key] = cleanValue
+function extractPair(d) {
+	const flatInput = d.flat(10).filter(Boolean);
+
+	const key = flatInput[0].value;
+	let value = flatInput[2].value.replace(/['"]+/g, '');
+	if (value && !isNaN(value)) {
+		value = Number.parseInt(value);
 	}
+	return { pair: [key, value] }
 }
 
 function extractParams(d) {
-	const output = {};
+	const flatInput = d.flat(10).filter(Boolean);
+	const params = Object.fromEntries(flatInput.map(x => x.pair).filter(Boolean));
 
-	extractPair(d[2], output);
+	return { params };
+}
 
-	for (let i in d[3]) {
-		extractPair(d[3][i][3], output);
-	}
-
-	return output;
+function extractAttribute(d) {
+	const flatInput = d.flat(10).filter(Boolean);
+	return { attribute: { name: flatInput[0].value, ...flatInput[1] } }
 }
 
 function extractAttributes(d) {
-	let output = [d[2]];
+	const flatInput = d.flat(10).filter(Boolean);
+	const attributes = flatInput.map(x => x.attribute).filter(Boolean);
 
-	for (let i in d[3]) {
-		output.push(d[3][i][3]);
-	}
-
-	return { attributes: output };
+	return { attributes };
 }
 
 %}
