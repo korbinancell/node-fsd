@@ -1,14 +1,11 @@
+[csharp(namespace: Facility.ExampleApi)]
+service ExampleApi
+{
+	method getWidgets {}: {
+		cheese: string;
+	}
 }
 
-# HelpPlz
+# getWidgets
 
-This is about help stuff
-
-## SubHeading
-
-Why tho, what is going on?
-# wat
-
-ok but what
-
-# hold
+they have stuff
