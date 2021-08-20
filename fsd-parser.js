@@ -4,14 +4,17 @@
 function id(x) { return x[0]; }
 
 const moo = require("moo");
-
+// ^(\s|.)+?(?<!#)#(?=\s)
+// (?:\\.[^"\\%]*)*%
 const lexer = moo.compile({
 	space: {match: /\s+/, lineBreaks: true},
 	summary: /\/\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
 	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
+	memberRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
+	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	value: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"|(?:[0-9a-zA-Z.+_-]+)/,
-	keyword: ['method', 'data', 'errors'],
+	keyword: ['method', 'data', 'errors', 'service'],
 	'[': '[',
 	']': ']',
 	'(': '(',
@@ -24,10 +27,31 @@ const lexer = moo.compile({
 	'"': '"',
 	':': ':',
 	';': ';',
-	'!': '!'
+	'!': '!',
 });
 
 
+
+function getRemarkTarget(remark) {
+	const remarkTarget = remark.trim().split(/\s/)[1];
+	const remarkBody = remark.trim().substring(1).trim().substring(remarkTarget.length).trim();
+	return { remarkTarget, remarkBody };
+}
+
+function extractRemarks(d) {
+	console.log(d.flat().flat().flat().filter(Boolean))
+	const remarks = d.flat().flat().flat().filter(Boolean);
+	return remarks.map(x => getRemarkTarget(x.text));
+}
+
+function extractService(d) {
+	return {
+		...extractDescriptors(d[0]),
+		remarks: '',
+		name: d[3].value,
+		members: d[6].flat().filter(Boolean).flat(),
+	};
+}
 
 function extractEnumType(d) {
 	return {
@@ -44,6 +68,7 @@ function extractEnum(d) {
 
 	return {
 		...extractDescriptors(d[0]),
+		remarks: '',
 		type: 'enum',
 		name: d[3].value,
 		types,
@@ -64,6 +89,7 @@ function extractDescriptors(d) {
 function extractDto(d) {
 	return {
 		...extractDescriptors(d[0]),
+		remarks: '',
 		type: 'dto',
 		name: d[3].value,
 		members: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
@@ -73,6 +99,7 @@ function extractDto(d) {
 function extractMethod(d) {
 	return {
 		...extractDescriptors(d[0]),
+		remarks: '',
 		type: 'method',
 		name: d[3].value,
 		requestAttrs: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
@@ -237,10 +264,25 @@ var grammar = {
             return d.join("");
         }
         },
-    {"name": "main$ebnf$1", "symbols": []},
-    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "errors"]},
-    {"name": "main$ebnf$1", "symbols": ["main$ebnf$1", "main$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
-    {"name": "main", "symbols": ["nl", {"literal":"{"}, "main$ebnf$1", "nl", {"literal":"}"}]},
+    {"name": "main", "symbols": [{"literal":"}"}, "remarks"], "postprocess": d => d},
+    {"name": "remarks$ebnf$1", "symbols": []},
+    {"name": "remarks$ebnf$1$subexpression$1", "symbols": ["nl", (lexer.has("memberRemark") ? {type: "memberRemark"} : memberRemark)]},
+    {"name": "remarks$ebnf$1", "symbols": ["remarks$ebnf$1", "remarks$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "remarks$ebnf$2$subexpression$1", "symbols": ["nl", (lexer.has("lastRemark") ? {type: "lastRemark"} : lastRemark)]},
+    {"name": "remarks$ebnf$2", "symbols": ["remarks$ebnf$2$subexpression$1"], "postprocess": id},
+    {"name": "remarks$ebnf$2", "symbols": [], "postprocess": function(d) {return null;}},
+    {"name": "remarks", "symbols": ["remarks$ebnf$1", "remarks$ebnf$2"], "postprocess": extractRemarks},
+    {"name": "service$ebnf$1", "symbols": []},
+    {"name": "service$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
+    {"name": "service$ebnf$1", "symbols": ["service$ebnf$1", "service$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "service$ebnf$2", "symbols": []},
+    {"name": "service$ebnf$2$subexpression$1", "symbols": ["nl", "serviceMembers"]},
+    {"name": "service$ebnf$2", "symbols": ["service$ebnf$2", "service$ebnf$2$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "service", "symbols": ["service$ebnf$1", {"literal":"service"}, "_", (lexer.has("name") ? {type: "name"} : name), "nl", {"literal":"{"}, "service$ebnf$2", "nl", {"literal":"}"}], "postprocess": extractService},
+    {"name": "serviceMembers", "symbols": ["method"]},
+    {"name": "serviceMembers", "symbols": ["dto"]},
+    {"name": "serviceMembers", "symbols": ["enum"]},
+    {"name": "serviceMembers", "symbols": ["errors"]},
     {"name": "errors$ebnf$1", "symbols": []},
     {"name": "errors$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
     {"name": "errors$ebnf$1", "symbols": ["errors$ebnf$1", "errors$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},

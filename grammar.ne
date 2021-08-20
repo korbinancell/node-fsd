@@ -1,13 +1,16 @@
 @{%
 const moo = require("moo");
-
+// ^(\s|.)+?(?<!#)#(?=\s)
+// (?:\\.[^"\\%]*)*%
 const lexer = moo.compile({
 	space: {match: /\s+/, lineBreaks: true},
 	summary: /\/\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
 	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
+	memberRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
+	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
 	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
 	value: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"|(?:[0-9a-zA-Z.+_-]+)/,
-	keyword: ['method', 'data', 'errors'],
+	keyword: ['method', 'data', 'errors', 'service'],
 	'[': '[',
 	']': ']',
 	'(': '(',
@@ -20,7 +23,7 @@ const lexer = moo.compile({
 	'"': '"',
 	':': ':',
 	';': ';',
-	'!': '!'
+	'!': '!',
 });
 %}
 
@@ -31,7 +34,18 @@ const lexer = moo.compile({
 @builtin "whitespace.ne"
 @builtin "string.ne"
 
-main -> nl "{" (nl errors):* nl "}"
+main -> "}" remarks															{% d => d %}
+
+# Remark
+remarks -> (nl %memberRemark):* (nl %lastRemark):?																									{% extractRemarks %} 
+
+# Service
+service -> (descriptors nl):* "service" _ %name nl "{" (nl serviceMembers):* nl "}"																	{% extractService %}
+serviceMembers ->
+	  method
+	| dto
+	| enum
+	| errors
 
 # Errors
 errors -> (descriptors nl):* "errors" _ %name nl "{" (enumMember _ ","):* (enumMember):? nl "}"														{% extractErrors %}
@@ -80,6 +94,26 @@ comment -> _ %comment _														{% d => null %}
 
 @{%
 
+function getRemarkTarget(remark) {
+	const remarkTarget = remark.trim().split(/\s/)[1];
+	const remarkBody = remark.trim().substring(1).trim().substring(remarkTarget.length).trim();
+	return { remarkTarget, remarkBody };
+}
+
+function extractRemarks(d) {
+	const remarks = d.flat().flat().flat().filter(Boolean);
+	return remarks.map(x => getRemarkTarget(x.text));
+}
+
+function extractService(d) {
+	return {
+		...extractDescriptors(d[0]),
+		remarks: '',
+		name: d[3].value,
+		members: d[6].flat().filter(Boolean).flat(),
+	};
+}
+
 function extractEnumType(d) {
 	return {
 		...extractDescriptors(d[0]),
@@ -95,6 +129,7 @@ function extractEnum(d) {
 
 	return {
 		...extractDescriptors(d[0]),
+		remarks: '',
 		type: 'enum',
 		name: d[3].value,
 		types,
@@ -115,6 +150,7 @@ function extractDescriptors(d) {
 function extractDto(d) {
 	return {
 		...extractDescriptors(d[0]),
+		remarks: '',
 		type: 'dto',
 		name: d[3].value,
 		members: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
@@ -124,6 +160,7 @@ function extractDto(d) {
 function extractMethod(d) {
 	return {
 		...extractDescriptors(d[0]),
+		remarks: '',
 		type: 'method',
 		name: d[3].value,
 		requestAttrs: d[6].map(x => ({ ...extractDescriptors(x[0]), ...x[2] })).flat(),
