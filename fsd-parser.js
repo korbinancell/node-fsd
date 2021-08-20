@@ -29,6 +29,29 @@ const lexer = moo.compile({
 
 
 
+function extractEnumType(d) {
+	console.log(d);
+	return {
+		...extractDescriptors(d[0]),
+		name: d[2].value
+	}
+}
+
+function extractEnum(d) {
+	console.log(d[6])
+	const types = d[6].map(x => x[0])
+	if (d[7] && d[7].length) {
+		types.push(d[7][0]);
+	}
+
+	return {
+		...extractDescriptors(d[0]),
+		type: 'enum',
+		name: d[3].value,
+		types,
+	}
+}
+
 function extractDescriptors(d) {
 	const clean = d.flat().filter(Boolean).flat();
 	const attributes = clean.map(x => x.attributes).filter(Boolean).flat();
@@ -213,9 +236,23 @@ var grammar = {
         }
         },
     {"name": "main$ebnf$1", "symbols": []},
-    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "dto"]},
+    {"name": "main$ebnf$1$subexpression$1", "symbols": ["nl", "enum"]},
     {"name": "main$ebnf$1", "symbols": ["main$ebnf$1", "main$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "main", "symbols": ["nl", {"literal":"{"}, "main$ebnf$1", "nl", {"literal":"}"}]},
+    {"name": "enum$ebnf$1", "symbols": []},
+    {"name": "enum$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
+    {"name": "enum$ebnf$1", "symbols": ["enum$ebnf$1", "enum$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "enum$ebnf$2", "symbols": []},
+    {"name": "enum$ebnf$2$subexpression$1", "symbols": ["enumMember", "_", {"literal":","}]},
+    {"name": "enum$ebnf$2", "symbols": ["enum$ebnf$2", "enum$ebnf$2$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "enum$ebnf$3$subexpression$1", "symbols": ["enumMember"]},
+    {"name": "enum$ebnf$3", "symbols": ["enum$ebnf$3$subexpression$1"], "postprocess": id},
+    {"name": "enum$ebnf$3", "symbols": [], "postprocess": function(d) {return null;}},
+    {"name": "enum", "symbols": ["enum$ebnf$1", {"literal":"enum"}, "_", (lexer.has("name") ? {type: "name"} : name), "nl", {"literal":"{"}, "enum$ebnf$2", "enum$ebnf$3", "nl", {"literal":"}"}], "postprocess": extractEnum},
+    {"name": "enumMember$ebnf$1", "symbols": []},
+    {"name": "enumMember$ebnf$1$subexpression$1", "symbols": ["nl", "descriptors"]},
+    {"name": "enumMember$ebnf$1", "symbols": ["enumMember$ebnf$1", "enumMember$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
+    {"name": "enumMember", "symbols": ["enumMember$ebnf$1", "nl", (lexer.has("name") ? {type: "name"} : name)], "postprocess": extractEnumType},
     {"name": "dto$ebnf$1", "symbols": []},
     {"name": "dto$ebnf$1$subexpression$1", "symbols": ["descriptors", "nl"]},
     {"name": "dto$ebnf$1", "symbols": ["dto$ebnf$1", "dto$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},

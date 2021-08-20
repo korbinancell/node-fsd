@@ -31,7 +31,11 @@ const lexer = moo.compile({
 @builtin "whitespace.ne"
 @builtin "string.ne"
 
-main -> nl "{" (nl dto):* nl "}"
+main -> nl "{" (nl enum):* nl "}"
+
+# Enum
+enum -> (descriptors nl):* "enum" _ %name nl "{" (enumMember _ ","):* (enumMember):? nl "}"															{% extractEnum %}
+enumMember -> (nl descriptors):* nl %name									{% extractEnumType %}
 
 # DTO
 dto -> (descriptors nl):* "data" _ %name nl "{" ((nl descriptors):* nl attrPair):* nl "}"															{% extractDto %}
@@ -72,6 +76,27 @@ nl ->
 comment -> _ %comment _														{% d => null %}
 
 @{%
+
+function extractEnumType(d) {
+	return {
+		...extractDescriptors(d[0]),
+		name: d[2].value
+	}
+}
+
+function extractEnum(d) {
+	const types = d[6].map(x => x[0])
+	if (d[7] && d[7].length) {
+		types.push(d[7][0]);
+	}
+
+	return {
+		...extractDescriptors(d[0]),
+		type: 'enum',
+		name: d[3].value,
+		types,
+	}
+}
 
 function extractDescriptors(d) {
 	const clean = d.flat().filter(Boolean).flat();

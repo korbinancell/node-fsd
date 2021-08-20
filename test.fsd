@@ -1,5 +1,7 @@
 {
-	data gift {
-		results: string[];
+	enum giftKinds {
+		form,
+		sms,
+		giftSchedule
 	}
 }
