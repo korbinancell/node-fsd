@@ -8,12 +8,14 @@ const lexer = moo.compile({
 	summary: { match: /\/\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/, value: d => d.substring(3).trim() },
 	comment: /\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/,
 	int: { match: /[0-9]+/, value: d => Number.parseInt(d) },
-	attrValue: /(?<=:(?:[ \t]))[a-zA-Z_.][0-9a-zA-Z_.]+(?=[,)])/,
+	attrValue: /(?<=:(?:[ \t]))[a-zA-Z_.][0-9a-zA-Z_.]*(?=[,)])/,
 	string: { match: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"/, value: d => d.replace(/['"]+/g, '') },
 	remark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
 	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
+	key: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t]?):)/,
+	ident: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t]?)(?:[(\],]))/,
 	name: {
-		match: /[a-zA-Z_][0-9a-zA-Z_]+/,
+		match: /[a-zA-Z_][0-9a-zA-Z_]*/,
 		type: moo.keywords({
 			service: 'service',
 			serviceMembers: ['method', 'data', 'enum', 'errors'],
@@ -43,7 +45,7 @@ method -> descriptors "method" _ %name _ dataBody _ ":" _ dataBody			{% d => ({ 
 # Dto
 dto -> descriptors "data" _ %name _ dataBody								{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5] }) %}
 dataBody -> "{" (_ dataMember):* _ "}"										{% d => d[1].flat().filter(Boolean) %}
-dataMember -> descriptors %name _ ":" _ dataType "!":? _ ";"				{% d => ({ ...d[0], name: d[1], type: d[5], isRequired: d[6]?.value === '!' }) %}
+dataMember -> descriptors %key _ ":" _ dataType "!":? _ ";"				{% d => ({ ...d[0], name: d[1], type: d[5], isRequired: d[6]?.value === '!' }) %}
 dataType ->
 	  dataType "[" "]"														{% extractDataType %}
 	| %templateTypes "<" dataType ">"										{% extractDataType %}
@@ -56,7 +58,7 @@ errors -> descriptors "errors" _ %name _ enumBody							{% d => ({ ...d[0], type
 # Enum
 enum -> descriptors "enum" _ %name _ enumBody								{% d => ({ ...d[0], type: d[1], name: d[3], types: d[5] }) %}
 enumBody -> "{" (_ enumType _ ","):* (_ enumType):? _ "}"					{% d => [...d[1].flat().filter(x => !!x && x.type !== 'symbol'), d[2]?.[1]].filter(Boolean) %}
-enumType -> descriptors %name												{% d => ({ ...d[0], name: d[1] }) %}
+enumType -> descriptors %ident												{% d => ({ ...d[0], name: d[1] }) %}
 
 
 
@@ -71,9 +73,9 @@ descriptor ->
 summary -> %summary															{% id %}
 
 attributes -> "[" _ attribute (_ "," _ attribute):* _ "]"					{% d => [d[2], ...d[3].flat().filter(x => !!x && x.type !== 'symbol')] %}
-attribute -> %name (_ params):?												{% d => ({ name: d[0], params: d[1] && d[1][1]}) %}
+attribute -> %ident (_ params):?											{% d => ({ name: d[0], params: d[1] && d[1][1]}) %}
 params -> "(" _ pair (_ "," _ pair):* _ ")"									{% d => [d[2], ...d[3].flat().filter(x => !!x && x.type !== 'symbol')] %}
-pair -> %name _ ":" _ parameterValue										{% d => ({ key: d[0], value: d[4] }) %}
+pair -> %key _ ":" _ parameterValue											{% d => ({ key: d[0], value: d[4] }) %}
 parameterValue ->
 	  %string																{% id %}
 	| %int																	{% id %}
