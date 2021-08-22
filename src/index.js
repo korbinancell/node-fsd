@@ -16,6 +16,7 @@ function parseFsd(fsdString) {
 	parser.feed(cleanFsd);
 	const { api, remarks } = parser.results[0];
 
+	// TODO warn about remainingRemarks
 	// Sew up remarks and members
 	const remainingRemarks = new Set(remarks);
 	const serviceName = api.name.value;
@@ -35,7 +36,8 @@ function parseFsd(fsdString) {
 		}
 	}
 
-	// TODO warn about remainingRemarks
+	// TODO check for duplicate members
+	// TODO check for unknown field types
 
 	return api;
 }

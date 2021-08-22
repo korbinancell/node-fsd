@@ -8,7 +8,7 @@ const lexer = moo.compile({
 	summary: { match: /\/\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/, value: d => d.substring(3).trim() },
 	comment: /\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/,
 	int: { match: /[0-9]+/, value: d => Number.parseInt(d) },
-	attrValue: /(?<=:(?:[ \t]))[a-zA-Z_.][0-9a-zA-Z_.]*(?=[,)])/,
+	attrValue: /(?<=:(?:[ \t]))[a-zA-Z_.][0-9a-zA-Z_.-]*(?=[,)])/,
 	string: { match: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"/, value: d => d.replace(/['"]+/g, '') },
 	remark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
 	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
