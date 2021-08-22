@@ -1,257 +1,126 @@
 @{%
+
 const moo = require("moo");
 
 const lexer = moo.compile({
-	space: {match: /\s+/, lineBreaks: true},
-	summary: /\/\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
-	comment: /\/\/(?:[^\r\n]*)(?:\r\n?|\n|$)/,
-	memberRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
+	space: { match: /\s+/, lineBreaks: true },
+	symbol: '{}:[](),;<>!'.split(''),
+	summary: { match: /\/\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/, value: d => d.substring(3).trim() },
+	comment: /\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/,
+	int: { match: /[0-9]+/, value: d => Number.parseInt(d) },
+	attrValue: /(?<=:(?:[ \t]))[a-zA-Z_.][0-9a-zA-Z_.]+(?=[,)])/,
+	string: { match: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"/, value: d => d.replace(/['"]+/g, '') },
+	remark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
 	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
-	valueParams: /(?<=:\s)"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"/,
-	value: /(?<=:\s).[^,)\s;{}!]+/,
-	name: /[a-zA-Z_][0-9a-zA-Z_]*/,
-	keyword: ['method', 'data', 'errors', 'service', "{}"],
-	'[': '[',
-	']': ']',
-	'(': '(',
-	')': ')',
-	'{': '{',
-	'}': '}',
-	'<': '<',
-	'>': '>',
-	',': ',',
-	'"': '"',
-	':': ':',
-	';': ';',
-	'!': '!',
+	name: {
+		match: /[a-zA-Z_][0-9a-zA-Z_]+/,
+		type: moo.keywords({
+			service: 'service',
+			serviceMembers: ['method', 'data', 'enum', 'errors'],
+			primativeDataType: ['string'],
+			templateTypes: ['map', 'result']
+		})
+	},
 });
+
 %}
 
-# Pass your lexer object using the @lexer option:
 @lexer lexer
 
-@builtin "number.ne"
-@builtin "whitespace.ne"
-@builtin "string.ne"
-
-main -> nl service
-
-# Remark
-remarks -> (nl %memberRemark):* (nl %lastRemark):?							{% extractRemarks %}
-
+main -> _ service _ remarks
 # Service
-service -> descriptors "service" _ %name nl serviceBody						{% extractService %}
-serviceBody -> 
-	  "{}"																	{% extractServiceBody %}
-	| "{" (nl serviceMembers):* nl "}"										{% extractServiceBody %}
+service -> descriptors "service" _ %name _ serviceBody						{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5] }) %}
+serviceBody -> "{" (_ serviceMembers):* _ "}"								{% d => d[1].flat().filter(Boolean) %}
 serviceMembers ->
-	  method
-	| dto
-	| enum
-	| errors
-
-# Errors
-errors -> descriptors "errors" _ %name nl enumBody							{% extractErrors %}
-
-# Enum
-enum -> descriptors "enum" _ %name nl enumBody								{% extractEnum %}
-enumBody ->
-	  "{}"																	{% extractEnumBody %}
-	| "{" (nl descriptors %name _ ","):* (nl descriptors %name):? nl "}"	{% extractEnumBody %}
-
-# DTO
-dto -> descriptors "data" _ %name nl methodBody								{% extractDto %}
+	  method																{% id %}
+	| dto																	{% id %}
+	| enum																	{% id %}
+	| errors																{% id %}
 
 # Method
-method -> descriptors "method" _ %name nl methodBody nl ":" nl methodBody	{% extractMethod %}
-methodBody ->
-	  "{}"																	{% extractMethodBody %}
-	| "{" (nl descriptors attrPair):* nl "}"								{% extractMethodBody %}
+method -> descriptors "method" _ %name _ dataBody _ ":" _ dataBody			{% d => ({ ...d[0], type: d[1], name: d[3], requestBody: d[5], responseBody: d[9] }) %}
 
-# DTO & Method pair
-attrPair -> %name _ ":" _ attrValue _ "!":? _ ";"							{% d => ({ attribute: { name: d[0].value, value: d[4], isRequired: !!d[6] }}) %}
-attrValue ->
-	  %value																{% d => ({ type: d[0].value }) %}
-	| %value _ "<" _ attrValue _ ">"										{% d => ({ type: d[0].value, value: d[4] }) %}
-	| attrValue _ "[" "]"													{% d => ({ type: d[0], isArray: true }) %}
+# Dto
+dto -> descriptors "data" _ %name _ dataBody								{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5] }) %}
+dataBody -> "{" (_ dataMember):* _ "}"										{% d => d[1].flat().filter(Boolean) %}
+dataMember -> descriptors %name _ ":" _ dataType "!":? _ ";"				{% d => ({ ...d[0], name: d[1], type: d[5], isRequired: d[6]?.value === '!' }) %}
+dataType ->
+	  dataType "[" "]"														{% extractDataType %}
+	| %templateTypes "<" dataType ">"										{% extractDataType %}
+	| %primativeDataType													{% extractDataType %}
+	| %name																	{% extractDataType %}
 
-# FSD Desc
-descriptors -> (descriptor nl):*											{% extractDescriptors %}
-descriptor -> summary | attributes
+# Errors
+errors -> descriptors "errors" _ %name _ enumBody							{% d => ({ ...d[0], type: d[1], name: d[3], errors: d[5] }) %}
 
-# Summary
-summary -> %summary															{% extractSummary %}
+# Enum
+enum -> descriptors "enum" _ %name _ enumBody								{% d => ({ ...d[0], type: d[1], name: d[3], types: d[5] }) %}
+enumBody -> "{" (_ enumType _ ","):* (_ enumType):? _ "}"					{% d => [...d[1].flat().filter(x => !!x && x.type !== 'symbol'), d[2]?.[1]].filter(Boolean) %}
+enumType -> descriptors %name												{% d => ({ ...d[0], name: d[1] }) %}
 
-# Attributes
-attributes -> "[" _ attribute (_ "," _ attribute):* _ "]"					{% extractAttributes %}
-attribute -> %name (_ params):?												{% extractAttribute %}
 
-params -> "(" _ pair (_ "," _ pair):* _ ")"									{% extractParams %}
-pair -> %name _ ":" _ value													{% extractPair %}
-value -> %valueParams | %value
+
+# Descriptors
+descriptors ->
+	  null																	{% () => extractDescriptors(null) %}
+	| (descriptor _):+														{% d => extractDescriptors(d) %}
+descriptor ->
+	  summary																{% id %}
+	| attributes															{% id %}
+
+summary -> %summary															{% id %}
+
+attributes -> "[" _ attribute (_ "," _ attribute):* _ "]"					{% d => [d[2], ...d[3].flat().filter(x => !!x && x.type !== 'symbol')] %}
+attribute -> %name (_ params):?												{% d => ({ name: d[0], params: d[1] && d[1][1]}) %}
+params -> "(" _ pair (_ "," _ pair):* _ ")"									{% d => [d[2], ...d[3].flat().filter(x => !!x && x.type !== 'symbol')] %}
+pair -> %name _ ":" _ parameterValue										{% d => ({ key: d[0], value: d[4] }) %}
+parameterValue ->
+	  %string																{% id %}
+	| %int																	{% id %}
+	| %attrValue															{% id %}
+
+# Remarks
+remarks ->
+	  null																	{% d => [] %}
+	| (%remark _):* %lastRemark _											{% formatRemarks %}
 
 # Shared
-nl ->
-	  null
-	| %space:? comment:? %space:?											{% d => null %}
-comment -> _ %comment _														{% d => null %}
+_ ->
+	  null																	{% d => null %}
+	| %space																{% d => null %}
 
 @{%
 
-function finalCleanup(d) {
-	// console.log(d)
-	return d;
-}
-
-function getRemarkTarget(remark) {
-	const remarkTarget = remark.trim().split(/\s/)[1];
-	const remarkBody = remark.trim().substring(1).trim().substring(remarkTarget.length).trim();
-	return { remarkTarget, remarkBody };
-}
-
-function extractRemarks(d) {
-	const remarks = d.flat().flat().flat().filter(Boolean);
-	return remarks.map(x => getRemarkTarget(x.text));
-}
-
-function extractServiceBody(d) {
-	const members = d.flat(10).filter(x => !!x && x.type !== '{' && x.type !== '}' && x.text !== '{}');
-
-	return { members }
-}
-
-function extractService(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	const descriptors = flatInput[0]?.descriptors;
-
-	return {
-		...descriptors,
-		remarks: '',
-		name: flatInput[2].value,
-		members: flatInput[3].members,
-	};
-}
-
-function extractEnumBody(d) {
-	const filteredInput = d.filter(x => !!x && x.type !== '{' && x.type !== '}' && x.text !== '{}');
-	let flatInput;
-	if (filteredInput.length === 2) {
-		flatInput = filteredInput[0];
-		flatInput.push(filteredInput[1]);
-	} else {
-		flatInput = filteredInput.flat();
-	}
-
-	if (!flatInput.length) {
-		return { types: []};
-	}
-
-	return { types: flatInput.map(x => x.filter(Boolean)).reduce((acc, attr) => {
-		const descriptors = attr[0].descriptors;
-		const name = attr[1].value;
-		acc.push({ ...descriptors, name });
-		return acc;
-	}, []) }
-}
-
-function extractEnum(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	const descriptors = flatInput[0]?.descriptors;
-
-	return {
-		...descriptors,
-		remarks: '',
-		type: 'enum',
-		name: flatInput[2].value,
-		types: flatInput[3].types,
-	}
-}
-
-function extractErrors(d) {
-	return { ...extractEnum(d), type: 'errors' };
+function formatRemarks(d) {
+	const remarks = [...d[0].flat().filter(Boolean), d[1]]
+		.filter(Boolean)
+		.map(x => {
+			const remark = { ...x };
+			const hold = remark.value.match(/#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)/g)?.[0] ?? '';
+			remark.type = 'remark';
+			remark.for = hold.substring(1).trim();
+			remark.value = x.value.substring(hold.length).trim();
+			return remark;
+		})
+	return remarks;
 }
 
 function extractDescriptors(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	const attributes = flatInput.map(x => x.attributes).filter(Boolean).flat();
-	const summaryLines = flatInput.map(x => x.summary).filter(Boolean).flat();
-
-	return { descriptors: { summaryLines, attributes } };
-}
-
-function extractDto(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	const descriptors = flatInput[0]?.descriptors;
-
-	return {
-		...descriptors,
-		remarks: '',
-		type: 'dto',
-		name: flatInput[2].value,
-		members: flatInput[3].attributes,
-	}
-}
-
-function extractMethodBody(d) {
-	const flatInput = d.flat().filter(x => !!x && x.type !== '{' && x.type !== '}' && x.text !== '{}');
-	if (!flatInput.length) {
-		return { attributes: []};
+	const summaryLines = []
+	const attributes = []
+	if (!d?.length) return { summaryLines, attributes };
+	for (const desc of d[0]) {
+		if (Array.isArray(desc[0])) attributes.push(...desc[0])
+		else summaryLines.push(desc[0])
 	}
 
-	return { attributes: flatInput.map(x => x.filter(Boolean)).reduce((acc, attr) => {
-		const descriptors = attr[0].descriptors;
-		const attribute = attr[1].attribute;
-		acc.push({...descriptors, ...attribute});
-		return acc;
-	}, []) }
+	return { summaryLines, attributes };
 }
 
-function extractMethod(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	const descriptors = flatInput[0]?.descriptors;
-
-	return {
-		...descriptors,
-		remarks: '',
-		type: 'method',
-		name: flatInput[2].value,
-		requestAttrs: flatInput[3]?.attributes || [],
-		responseAttrs: flatInput[5]?.attributes || []
-	}
-}
-
-function extractSummary(d) {
-	return { summary: d.flat(10).filter(Boolean)[0].value.trim().substring(3).trim() };
-}
-
-function extractPair(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-
-	const key = flatInput[0].value;
-	let value = flatInput[2].value.replace(/['"]+/g, '');
-	if (value && !isNaN(value)) {
-		value = Number.parseInt(value);
-	}
-	return { pair: [key, value] }
-}
-
-function extractParams(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	const params = Object.fromEntries(flatInput.map(x => x.pair).filter(Boolean));
-
-	return { params };
-}
-
-function extractAttribute(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	return { attribute: { name: flatInput[0].value, ...flatInput[1] } }
-}
-
-function extractAttributes(d) {
-	const flatInput = d.flat(10).filter(Boolean);
-	const attributes = flatInput.map(x => x.attribute).filter(Boolean);
-
-	return { attributes };
+function extractDataType(d) {
+	if (d.length === 1) return d[0]
+	if (d[0].type === 'templateTypes') return { type: d[0], kind: d[2] };
+	return { type: 'array', kind: d[0] };
 }
 
 %}
