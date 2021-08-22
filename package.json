@@ -12,7 +12,8 @@
     "nearley": "^2.20.1"
   },
   "scripts": {
-    "compile": "nearleyc grammar.ne -o fsd-parser.js",
+    "compile": "nearleyc fsd-grammar/fsd.ne -o src/fsd-parser.g.js",
     "test": "node test.js"
-  }
+  },
+  "devDependencies": {}
 }

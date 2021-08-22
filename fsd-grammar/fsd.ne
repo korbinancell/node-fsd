@@ -19,7 +19,7 @@ const lexer = moo.compile({
 		type: moo.keywords({
 			service: 'service',
 			serviceMembers: ['method', 'data', 'enum', 'errors'],
-			primativeDataType: ['string'],
+			primativeDataType: ['string', 'boolean', 'double', 'int32', 'int64', 'decimal', 'bytes', 'object', 'error'],
 			templateTypes: ['map', 'result']
 		})
 	},
@@ -29,7 +29,8 @@ const lexer = moo.compile({
 
 @lexer lexer
 
-main -> _ service _ remarks
+main -> _ service _ remarks													{% d => ({ api: d[1], remarks: d[3] }) %}
+
 # Service
 service -> descriptors "service" _ %name _ serviceBody						{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5] }) %}
 serviceBody -> "{" (_ serviceMembers):* _ "}"								{% d => d[1].flat().filter(Boolean) %}
@@ -45,7 +46,7 @@ method -> descriptors "method" _ %name _ dataBody _ ":" _ dataBody			{% d => ({ 
 # Dto
 dto -> descriptors "data" _ %name _ dataBody								{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5] }) %}
 dataBody -> "{" (_ dataMember):* _ "}"										{% d => d[1].flat().filter(Boolean) %}
-dataMember -> descriptors %key _ ":" _ dataType "!":? _ ";"				{% d => ({ ...d[0], name: d[1], type: d[5], isRequired: d[6]?.value === '!' }) %}
+dataMember -> descriptors %key _ ":" _ dataType "!":? _ ";"					{% d => ({ ...d[0], name: d[1], type: d[5], isRequired: d[6]?.value === '!' }) %}
 dataType ->
 	  dataType "[" "]"														{% extractDataType %}
 	| %templateTypes "<" dataType ">"										{% extractDataType %}
@@ -83,13 +84,13 @@ parameterValue ->
 
 # Remarks
 remarks ->
-	  null																	{% d => [] %}
+	  null																	{% () => [] %}
 	| (%remark _):* %lastRemark _											{% formatRemarks %}
 
 # Shared
 _ ->
-	  null																	{% d => null %}
-	| %space																{% d => null %}
+	  null																	{% () => null %}
+	| %space																{% () => null %}
 
 @{%
 

@@ -23,7 +23,7 @@ const lexer = moo.compile({
 		type: moo.keywords({
 			service: 'service',
 			serviceMembers: ['method', 'data', 'enum', 'errors'],
-			primativeDataType: ['string'],
+			primativeDataType: ['string', 'boolean', 'double', 'int32', 'int64', 'decimal', 'bytes', 'object', 'error'],
 			templateTypes: ['map', 'result']
 		})
 	},
@@ -67,7 +67,7 @@ function extractDataType(d) {
 var grammar = {
     Lexer: lexer,
     ParserRules: [
-    {"name": "main", "symbols": ["_", "service", "_", "remarks"]},
+    {"name": "main", "symbols": ["_", "service", "_", "remarks"], "postprocess": d => ({ api: d[1], remarks: d[3] })},
     {"name": "service", "symbols": ["descriptors", {"literal":"service"}, "_", (lexer.has("name") ? {type: "name"} : name), "_", "serviceBody"], "postprocess": d => ({ ...d[0], type: d[1], name: d[3], members: d[5] })},
     {"name": "serviceBody$ebnf$1", "symbols": []},
     {"name": "serviceBody$ebnf$1$subexpression$1", "symbols": ["_", "serviceMembers"]},
@@ -125,13 +125,13 @@ var grammar = {
     {"name": "parameterValue", "symbols": [(lexer.has("string") ? {type: "string"} : string)], "postprocess": id},
     {"name": "parameterValue", "symbols": [(lexer.has("int") ? {type: "int"} : int)], "postprocess": id},
     {"name": "parameterValue", "symbols": [(lexer.has("attrValue") ? {type: "attrValue"} : attrValue)], "postprocess": id},
-    {"name": "remarks", "symbols": [], "postprocess": d => []},
+    {"name": "remarks", "symbols": [], "postprocess": () => []},
     {"name": "remarks$ebnf$1", "symbols": []},
     {"name": "remarks$ebnf$1$subexpression$1", "symbols": [(lexer.has("remark") ? {type: "remark"} : remark), "_"]},
     {"name": "remarks$ebnf$1", "symbols": ["remarks$ebnf$1", "remarks$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "remarks", "symbols": ["remarks$ebnf$1", (lexer.has("lastRemark") ? {type: "lastRemark"} : lastRemark), "_"], "postprocess": formatRemarks},
-    {"name": "_", "symbols": [], "postprocess": d => null},
-    {"name": "_", "symbols": [(lexer.has("space") ? {type: "space"} : space)], "postprocess": d => null}
+    {"name": "_", "symbols": [], "postprocess": () => null},
+    {"name": "_", "symbols": [(lexer.has("space") ? {type: "space"} : space)], "postprocess": () => null}
 ]
   , ParserStart: "main"
 }
