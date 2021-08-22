@@ -32,7 +32,7 @@ const lexer = moo.compile({
 main -> _ service _ remarks													{% d => ({ api: d[1], remarks: d[3] }) %}
 
 # Service
-service -> descriptors "service" _ %name _ serviceBody						{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5] }) %}
+service -> descriptors "service" _ %name _ serviceBody						{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5], remarks: '' }) %}
 serviceBody -> "{" (_ serviceMembers):* _ "}"								{% d => d[1].flat().filter(Boolean) %}
 serviceMembers ->
 	  method																{% id %}
@@ -41,10 +41,10 @@ serviceMembers ->
 	| errors																{% id %}
 
 # Method
-method -> descriptors "method" _ %name _ dataBody _ ":" _ dataBody			{% d => ({ ...d[0], type: d[1], name: d[3], requestBody: d[5], responseBody: d[9] }) %}
+method -> descriptors "method" _ %name _ dataBody _ ":" _ dataBody			{% d => ({ ...d[0], type: d[1], name: d[3], requestBody: d[5], responseBody: d[9], remarks: '' }) %}
 
 # Dto
-dto -> descriptors "data" _ %name _ dataBody								{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5] }) %}
+dto -> descriptors "data" _ %name _ dataBody								{% d => ({ ...d[0], type: d[1], name: d[3], members: d[5], remarks: '' }) %}
 dataBody -> "{" (_ dataMember):* _ "}"										{% d => d[1].flat().filter(Boolean) %}
 dataMember -> descriptors %key _ ":" _ dataType "!":? _ ";"					{% d => ({ ...d[0], name: d[1], type: d[5], isRequired: d[6]?.value === '!' }) %}
 dataType ->
@@ -54,10 +54,10 @@ dataType ->
 	| %name																	{% extractDataType %}
 
 # Errors
-errors -> descriptors "errors" _ %name _ enumBody							{% d => ({ ...d[0], type: d[1], name: d[3], errors: d[5] }) %}
+errors -> descriptors "errors" _ %name _ enumBody							{% d => ({ ...d[0], type: d[1], name: d[3], errors: d[5], remarks: '' }) %}
 
 # Enum
-enum -> descriptors "enum" _ %name _ enumBody								{% d => ({ ...d[0], type: d[1], name: d[3], types: d[5] }) %}
+enum -> descriptors "enum" _ %name _ enumBody								{% d => ({ ...d[0], type: d[1], name: d[3], types: d[5], remarks: '' }) %}
 enumBody -> "{" (_ enumType _ ","):* (_ enumType):? _ "}"					{% d => [...d[1].flat().filter(x => !!x && x.type !== 'symbol'), d[2]?.[1]].filter(Boolean) %}
 enumType -> descriptors %ident												{% d => ({ ...d[0], name: d[1] }) %}
 

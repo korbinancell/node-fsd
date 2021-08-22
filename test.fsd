@@ -1,5 +1,11 @@
-service test {}
+service test {
+	data remark {}
+}
 
 # remark
 
 halp
+
+# test
+
+wat
