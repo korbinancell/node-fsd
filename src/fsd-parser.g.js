@@ -7,17 +7,18 @@ function id(x) { return x[0]; }
 const moo = require("moo");
 
 const lexer = moo.compile({
+	comment: { match: /\s+(?<!\/)\/\/(?!\/)(?:[^\r\n]*)\s+/, lineBreaks: true },
 	space: { match: /\s+/, lineBreaks: true },
 	symbol: '{}:[](),;<>!'.split(''),
 	summary: { match: /\/\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/, value: d => d.substring(3).trim() },
-	comment: /\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/,
+	// comment: { match: /\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/, lineBreaks: true },
 	int: { match: /[0-9]+/, value: d => Number.parseInt(d) },
 	attrValue: /(?<=:(?:[ \t]))[a-zA-Z_.][0-9a-zA-Z_.-]*(?=[,)])/,
 	string: { match: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"/, value: d => d.replace(/['"]+/g, '') },
 	remark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
 	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
 	key: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t]?):)/,
-	ident: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t]?)(?:[(\],]))/,
+	ident: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t\r\n]*?)(?:[(\],}]))/,
 	name: {
 		match: /[a-zA-Z_][0-9a-zA-Z_]*/,
 		type: moo.keywords({
@@ -131,6 +132,7 @@ var grammar = {
     {"name": "remarks$ebnf$1", "symbols": ["remarks$ebnf$1", "remarks$ebnf$1$subexpression$1"], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
     {"name": "remarks", "symbols": ["remarks$ebnf$1", (lexer.has("lastRemark") ? {type: "lastRemark"} : lastRemark), "_"], "postprocess": formatRemarks},
     {"name": "_", "symbols": [], "postprocess": () => null},
+    {"name": "_", "symbols": [(lexer.has("comment") ? {type: "comment"} : comment)], "postprocess": () => null},
     {"name": "_", "symbols": [(lexer.has("space") ? {type: "space"} : space)], "postprocess": () => null}
 ]
   , ParserStart: "main"

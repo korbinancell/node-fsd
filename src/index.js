@@ -1,20 +1,14 @@
-const nearley = require("nearley");
+const nearley = require('nearley');
 const grammar = require('./fsd-parser.g.js');
 
-const commentCleaner = /"(\\[\s\S]|[^"])*"|'(\\[\s\S]|[^'])*'|((?<!\/)\/\/(?!\/).*)/g
-
 function parseFsd(fsdString) {
-	// Remove all comments
-	const cleanFsd = fsdString.replace(commentCleaner, (all, _s, _d, comment) => {
-		if (comment) {
-			return all.replace(comment, '');
-		}
-		return all;
-	});
-
 	const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar));
-	parser.feed(cleanFsd);
+	parser.feed(fsdString);
 	const { api, remarks } = parser.results[0];
+
+	if (parser.results.length > 1) {
+		throw new Error(`Grammar regression found. Found ${parser.results.length} results.`);
+	}
 
 	// TODO warn about remainingRemarks
 	// Sew up remarks and members

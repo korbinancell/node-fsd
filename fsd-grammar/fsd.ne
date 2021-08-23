@@ -3,17 +3,18 @@
 const moo = require("moo");
 
 const lexer = moo.compile({
+	comment: { match: /\s+(?<!\/)\/\/(?!\/)(?:[^\r\n]*)\s+/, lineBreaks: true },
 	space: { match: /\s+/, lineBreaks: true },
 	symbol: '{}:[](),;<>!'.split(''),
 	summary: { match: /\/\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/, value: d => d.substring(3).trim() },
-	comment: /\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/,
+	// comment: { match: /\/\/(?:[^\r\n]*)(?=(?:\r\n?|\n|$))/, lineBreaks: true },
 	int: { match: /[0-9]+/, value: d => Number.parseInt(d) },
 	attrValue: /(?<=:(?:[ \t]))[a-zA-Z_.][0-9a-zA-Z_.-]*(?=[,)])/,
 	string: { match: /"(?:\\["bfnrt\/\\]|\\u[a-fA-F0-9]{4}|[^"\\])*"/, value: d => d.replace(/['"]+/g, '') },
 	remark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*?(?<!#)(?=#\s)/,
 	lastRemark: /#[ \t]+(?:[a-zA-Z_][0-9a-zA-Z_]*)(?:\s|.)*/,
 	key: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t]?):)/,
-	ident: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t]?)(?:[(\],]))/,
+	ident: /[a-zA-Z_][0-9a-zA-Z_]+(?=(?:[ \t\r\n]*?)(?:[(\],}]))/,
 	name: {
 		match: /[a-zA-Z_][0-9a-zA-Z_]*/,
 		type: moo.keywords({
@@ -90,6 +91,7 @@ remarks ->
 # Shared
 _ ->
 	  null																	{% () => null %}
+	| %comment																{% () => null %}
 	| %space																{% () => null %}
 
 @{%
