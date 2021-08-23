@@ -6,7 +6,7 @@ function generateFsd(fsdString) {
 	// TODO validation
 	// TODO find out if we should try to preserve strings in attributes params unlike https://facilityapi.github.io/editor/
 
-	const remarks = [`\n${genRemark(api)}`];
+	const remarks = api.remarks ? [`\n${genRemark(api)}`] : [''];
 	const members = api.members.map(member => {
 		if (member.remarks) remarks.push(genRemark(member));
 		switch(member.type.value) {
